@@ -8,8 +8,8 @@ uart = UART(0, baudrate=1000000, bits=8, parity=None, stop=1, tx=Pin(0), rx=Pin(
 oe = Pin(2, Pin.OUT)
 oe.high()  # start in receive mode
 
-servo_a = 1
-servo_b = 2
+servo_a = 5
+servo_b = 6
 
 angle_sequence_1 = [150, 300, 150, 50,  150, 50,  150]
 speed_sequence_1 = [100, 50,  100, 100, 100, 100, 50]
@@ -190,8 +190,33 @@ def update_servo(id):
         if abs(cur - target_pos) < 10:
             entry["moving"] = False   # finished
 
+def scan_servos():
+    found = []
+
+    for dxl_id in range(0, 254):
+        # Build ping packet
+        body = [dxl_id, 2, 1]     # ID, LENGTH=2, instruction=PING
+        pkt = bytearray([0xFF,0xFF] + body + [checksum(body)])
+
+        clear_uart()
+        send_packet(pkt)
+        resp = read_status()
+
+        # Look for a REAL response (ERROR = 0)
+        # Echo packet has error=0x01 or 0x02, so we skip those
+        for i in range(len(resp) - 6):
+            if (resp[i] == 0xFF and resp[i+1] == 0xFF 
+                and resp[i+2] == dxl_id 
+                and resp[i+4] == 0x00):   # error byte = OK
+                print("Found servo ID:", dxl_id)
+                found.append(dxl_id)
+                break
+
+    return found
 
 
+ids = scan_servos()
+print("Servos found:", ids)
 
 while True:
     update_servo(servo_a)
