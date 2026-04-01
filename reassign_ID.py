@@ -75,9 +75,12 @@ def ping(id):
 # -----------------------------
 def write_data(id, address, params):
     """Generic WRITE_DATA instruction."""
-#     body = [id, 2 + len(params), 0x03, address] + params
-    length = 2 + 1 + len(params)   # instruction + address + params
+    # body = [id, 2 + len(params), 0x03, address] + params
+    
+    # packet length = instruction length + address length + length params
+    length = 2 + 1 + len(params)   
     body = [id, length, 0x03, address] + params
+    
     pkt = bytearray([0xFF, 0xFF] + body + [checksum(body)])
 
     print("SEND:", [hex(x) for x in pkt])
