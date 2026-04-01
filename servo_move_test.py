@@ -8,7 +8,11 @@ uart = UART(0, baudrate=1000000, bits=8, parity=None, stop=1, tx=Pin(0), rx=Pin(
 oe = Pin(2, Pin.OUT)
 oe.high()  # start in receive mode
 
-DXL_ID = 2
+angle_sequence_1 = [150, 300, 150, 50,  150, 50,  150]
+speed_sequence_1 = [100, 50,  100, 100, 100, 100, 50]
+
+angle_sequence_2 = [150, 300, 150, 250, 150, 250, 150]
+speed_sequence_2 = [50, 100,  100, 100, 100, 100, 50]
 
 def clear_uart():
     while uart.any():
@@ -37,7 +41,10 @@ def checksum(data_bytes):
     return (~sum(data_bytes) & 0xFF)
 
 
-def move_to_angle(id, angle_deg):
+def move_to_angle(id, angle_deg, speed=200):
+    
+    write_speed(id, speed)
+    
     # Convert angle in degrees → Dynamixel 0–1023 range
     pos = int((angle_deg / 300) * 1023)
     pos = max(0, min(1023, pos))
@@ -141,41 +148,68 @@ def read_position_debug(id):
     return resp
 
 
-write_speed(1,  200)
-write_speed(2,  200)
+# Servo control sequence
+servo = {
+    1: {"target": None,
+        "queue_angle": angle_sequence_1,
+        "queue_speed": speed_sequence_1,
+        "moving": False},
+    2: {"target": None,
+        "queue_angle": angle_sequence_2,
+        "queue_speed": speed_sequence_2,
+        "moving": False}
+}
 
 
-id = 1
-angle = 300
-move_to_angle(id, angle)  
-wait_until_reached(id, angle)
+def update_servo(id):
+    """
+    Checks if the servo has reached the desired position then executes next command
+    """
+    entry = servo[id]
 
-id = 2
-angle = 150
-move_to_angle(id, anlge)  
-wait_until_reached(id, angle)
+    # 1. If not currently moving, start the next command
+    if not entry["moving"] and entry["queue_angle"]:
+        angle = entry["queue_angle"].pop(0)
+        speed = entry["queue_speed"].pop(0)
+        move_to_angle(id, angle, speed)   # your working function
+        entry["target"] = angle
+        entry["moving"] = True
+        return
+
+    # 2. If currently moving, check if we've arrived
+    if entry["moving"]:
+        cur = read_position(id)
+        if cur is None:
+            return  # ignore bad reads
+
+        target_pos = int((entry["target"] / 300) * 1023)
+
+        if abs(cur - target_pos) < 10:
+            entry["moving"] = False   # finished
 
 write_speed(1,  100)
 write_speed(2,  100)
 
-id = 1
-angle = 150
-move_to_angle(id, angle)  
-wait_until_reached(id, angle)
 
-id = 2
-angle = 300
-move_to_angle(id, anlge)  
-wait_until_reached(id, angle)
+while True:
+    update_servo(1)
+    update_servo(2)
+    
+    
+    # Exit condition: both queues empty and both idle
+    if (not servo[1]["moving"] and not servo[2]["moving"]
+        and not servo[1]["queue_angle"] and not servo[2]["queue_angle"]):
+        print("All servo tasks complete, exiting.")
+        break
+
+
+    # Do other work here if you want
+    time.sleep_ms(20)
 
 
 
 
-# # Move to 150 degrees (mid-point)
-# ang = 150
-# move_to_angle(ang, 1)
-# time.sleep(5)
-# move_to_angle(ang, 2)
-# time.sleep(1)
+
+
 
 
