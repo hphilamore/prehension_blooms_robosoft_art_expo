@@ -8,8 +8,8 @@ uart = UART(0, baudrate=1000000, bits=8, parity=None, stop=1, tx=Pin(0), rx=Pin(
 oe = Pin(2, Pin.OUT)
 oe.high()  # start in receive mode
 
-servo_a = 5
-servo_b = 6
+servo_a = 3
+servo_b = 4
 
 angle_sequence_1 = [150, 300, 150, 50,  150, 50,  150]
 speed_sequence_1 = [100, 50,  100, 100, 100, 100, 50]
@@ -66,8 +66,8 @@ def move_to_angle(id, angle_deg, speed=200):
     send_packet(packet)
     resp = read_status()
 
-    print("Sent angle:", angle_deg, "deg → pos", pos)
-    print("Status response:", [hex(b) for b in resp])
+    print("Servo", id, ": ", angle_deg, "deg → ( pos", pos, ")\n")
+#     print("Status response:", [hex(b) for b in resp])
     
 # -----------------------------
 # Write data instruction
@@ -82,13 +82,13 @@ def write_data(id, address, params):
     
     pkt = bytearray([0xFF, 0xFF] + body + [checksum(body)])
 
-    print("SEND:", [hex(x) for x in pkt])
+#     print("SEND:", [hex(x) for x in pkt])
 
     clear_uart()
     send_packet(pkt)
     resp = read_status()
 
-    print("RESPONSE:", [hex(x) for x in resp])
+#     print("RESPONSE:", [hex(x) for x in resp])
     return resp
     
 
@@ -152,43 +152,72 @@ def read_position_debug(id):
 
 
 # Servo control sequence
-servo = {
+servo_control_sequence = {
     servo_a: {"target": None,
-        "queue_angle": angle_sequence_1,
-        "queue_speed": speed_sequence_1,
-        "moving": False},
+              "queue_angle": angle_sequence_1.copy(),
+              "queue_speed": speed_sequence_1.copy(),
+              "moving": False},
     servo_b: {"target": None,
-        "queue_angle": angle_sequence_2,
-        "queue_speed": speed_sequence_2,
-        "moving": False}
+              "queue_angle": angle_sequence_2.copy(),
+              "queue_speed": speed_sequence_2.copy(),
+              "moving": False}
 }
+
+def restart_queue(id):
+    print(f"Servo {id} sequence complete — restarting its queue.")
+
+    # Refill JUST THIS SERVO
+    if id == servo_a:
+        servo_control_sequence[id]["queue_angle"] = angle_sequence_1.copy()
+        servo_control_sequence[id]["queue_speed"] = speed_sequence_1.copy()
+    elif id == servo_b:
+        servo_control_sequence[id]["queue_angle"] = angle_sequence_2.copy()
+        servo_control_sequence[id]["queue_speed"] = speed_sequence_2.copy()
 
 
 def update_servo(id):
     """
     Checks if the servo has reached the desired position then executes next command
     """
-    entry = servo[id]
+    control_sequence = servo_control_sequence[id]
 
     # 1. If not currently moving, start the next command
-    if not entry["moving"] and entry["queue_angle"]:
-        angle = entry["queue_angle"].pop(0)
-        speed = entry["queue_speed"].pop(0)
+    if not control_sequence["moving"]: # and control_sequence["queue_angle"]:
+        
+        # If queue is empty, restart this servo's queue
+        if not control_sequence["queue_angle"]:
+            restart_queue(id)
+            
+            
+#             print(f"Servo {id} sequence complete — restarting its queue.")
+#             
+#             # Refill JUST THIS SERVO
+#             if id == servo_a:
+#                 servo_control_sequence[id]["queue_angle"] = angle_sequence_1.copy()
+#                 servo_control_sequence[id]["queue_speed"] = speed_sequence_1.copy()
+#             elif id == servo_b:
+#                 servo_control_sequence[id]["queue_angle"] = angle_sequence_2.copy()
+#                 servo_control_sequence[id]["queue_speed"] = speed_sequence_2.copy()
+
+        
+        angle = control_sequence["queue_angle"].pop(0)
+        speed = control_sequence["queue_speed"].pop(0)
         move_to_angle(id, angle, speed)   # your working function
-        entry["target"] = angle
-        entry["moving"] = True
+        control_sequence["target"] = angle
+        control_sequence["moving"] = True
         return
 
-    # 2. If currently moving, check if we've arrived
-    if entry["moving"]:
+    # 2. If currently moving, check if we've arrived at target position
+    if control_sequence["moving"]:
         cur = read_position(id)
         if cur is None:
             return  # ignore bad reads
 
-        target_pos = int((entry["target"] / 300) * 1023)
+        target_pos = int((control_sequence["target"] / 300) * 1023)
 
         if abs(cur - target_pos) < 10:
-            entry["moving"] = False   # finished
+            control_sequence["moving"] = False   # finished
+#             print("Reached", angle)
 
 def scan_servos():
     found = []
@@ -215,28 +244,25 @@ def scan_servos():
     return found
 
 
-ids = scan_servos()
-print("Servos found:", ids)
+# ids = scan_servos()
+# print("Servos found:", ids)
 
 while True:
     update_servo(servo_a)
     update_servo(servo_b)
     
     
-    # Exit condition: both queues empty and both idle
-#     if (not servo[1]["moving"] and not servo[2]["moving"]
-#         and not servo[1]["queue_angle"] and not servo[2]["queue_angle"]):
-#         print("All servo tasks complete, exiting.")
-#         break
-
-    if (not servo[servo_a]["moving"] and not servo[servo_b]["moving"]
-            and not servo[servo_a]["queue_angle"] and not servo[servo_b]["queue_angle"]):
-            print("All servo tasks complete, exiting.")
-            break
+#     # Exit condition: both queues empty and both idle
+#     if (not servo[servo_a]["moving"] and not servo[servo_b]["moving"]
+#             and not servo[servo_a]["queue_angle"] and not servo[servo_b]["queue_angle"]):
+#             print("All servo tasks complete, exiting.")
+#             break
 
 
     # Do other work here if you want
     time.sleep_ms(20)
+
+
 
 
 
