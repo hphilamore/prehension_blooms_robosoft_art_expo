@@ -46,19 +46,18 @@ def ping_id(dxl_id):
         return True, resp
     return False, resp
 
-# print("Scanning all possible AX-12 IDs...")
-# 
-# found = []
-# 
-# for i in range(0, 254):  # valid range for AX-series
-#     ok, resp = ping_id(i)
-#     if ok:
-#         print("Found servo at ID:", i, " Response:", [hex(b) for b in resp])
-#         found.append(i)
-# 
-# if not found:
-#     print("No servos found.")
-# else:
-#     print("Scan complete. IDs detected:", found)
+print("Scanning all possible AX-12 IDs...")
 
-ping_id(1)
+found = []
+
+for i in range(0, 254):  # valid range for AX-series
+    ok, resp = ping_id(i)
+    if ok:
+        print("Found servo at ID:", i, " Response:", [hex(b) for b in resp])
+        found.append(i)
+
+if not found:
+    print("No servos found.")
+else:
+    print("Scan complete. IDs detected:", found)
+
